@@ -80,3 +80,14 @@ test('nobody listening: a connection problem', async () => {
   await assert.rejects(client.readRegisters(3, 0xb8, 1), (err) => problemOf(err) === 'connect');
   client.close();
 });
+
+test('close() while connecting leaves no connection open on the logger', async (t) => {
+  const { logger, client } = await setup(t);
+  const read = client.readRegisters(3, 0xb8, 1);
+  await new Promise((resolve) => setImmediate(resolve)); // the TCP connection is being opened
+  client.close();
+  await assert.rejects(read, (err) => problemOf(err) === 'connect');
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.equal(logger.sockets.size, 0);
+  assert.equal(logger.requests.length, 0);
+});

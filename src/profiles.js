@@ -63,8 +63,10 @@ const deyeThreePhaseHybrid = {
   functionCode: 3,
   ranges: [
     [0x01f4, 0x3b], // 0x1f4-0x22e: state, energies, temperature, alarms
-    [0x024a, 0x4a], // 0x24a-0x293: battery, grid, load
-    [0x02a0, 0x17], // 0x2a0-0x2b6: PV powers, high words of the grid and load powers
+    // 0x24a-0x2b6 in ONE request: battery, grid, load, PV, and the high words
+    // of the grid and load powers (0x2b2, 0x293). Read apart, a power crossing
+    // 0 W between two requests would combine into a ±65 kW spike.
+    [0x024a, 0x6d],
   ],
   maxStrings: 4,
   battery: true,

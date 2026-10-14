@@ -117,7 +117,7 @@ test('triggers: battery full and below a step, fault, export started and stopped
       ['inverter_fault', 'fault'],
       ['grid_export_stopped', 50], // the sample reading exports 350 W
       ['grid_export_started', 900],
-      ['grid_export_stopped', -300],
+      ['grid_export_stopped', 0], // importing: nothing exported
     ],
   );
 });
@@ -181,4 +181,52 @@ test('a profile without battery publishes no battery feature, a micro its PV inp
   ]);
   assert.equal(lastValue(w, 'pv_power'), 612.4);
   assert.equal(lastValue(w, 'pv1_power'), 157);
+});
+
+test('a spike of an index is skipped and does not block the next values', async (t) => {
+  const w = await world(t, { created: true });
+  const base = SAMPLE_READINGS.deye_hybrid;
+  w.logger.setReading({ ...base, importTotal: 9999.9 });
+  await w.hub.refresh();
+  assert.equal(lastValue(w, 'grid_import_total'), 3120.5);
+  w.logger.setReading({ ...base, importTotal: 3121.1 });
+  await w.hub.refresh();
+  assert.equal(lastValue(w, 'grid_import_total'), 3121.1);
+  // The same jump read again and again is real (Gladys was down for days).
+  w.logger.setReading({ ...base, importTotal: 3400 });
+  for (let i = 0; i < 3; i += 1) {
+    await w.hub.refresh();
+  }
+  assert.equal(lastValue(w, 'grid_import_total'), 3400);
+});
+
+test('the connection status is sent on changes only', async (t) => {
+  const w = await world(t, { created: true });
+  for (let i = 0; i < 3; i += 1) {
+    await w.hub.refresh();
+  }
+  assert.equal(w.fake.connectionStatuses.filter((status) => status.connected).length, 1);
+});
+
+test('a failed publication at start does not stop the reading timer', async (t) => {
+  const { createFakeGladys } = await import('@gladysassistant/integration-sdk/testing');
+  const { registerHandlers } = await import('../src/app.js');
+  const { FakeLogger } = await import('../tools/fake-logger.mjs');
+  const logger = await new FakeLogger({ serial: 1712345678 }).start();
+  const config = { host: '127.0.0.1', port: logger.port, serial: '1712345678', language: 'en' };
+  const gladys = createFakeGladys({ config });
+  t.mock.method(gladys, 'publishDiscoveredDevices', async () => {
+    throw new Error('429 Too Many Requests');
+  });
+  const app = registerHandlers(gladys, { client: { timeoutMs: 300 }, intervalMs: 30 });
+  t.after(async () => {
+    await app.stop();
+    await logger.stop();
+  });
+  await gladys.connect();
+  await app.ready;
+  // The user adds the device (published before the failure, in real life).
+  gladys.devices = [{ external_id: app.hub.ids().device, features: [] }];
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  assert.ok(logger.requests.length > 0, 'the timer reads anyway');
 });

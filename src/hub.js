@@ -30,6 +30,8 @@ const logger = createLogger({ name: 'solarman' });
 export const WIDGET_KEY = 'solar';
 export const OFFLINE_AFTER = 3;
 const HEARTBEAT_MS = 6 * 60 * 60 * 1000;
+export const MAX_INDEX_STEP_KWH = 100;
+export const JUMP_CONFIRMATIONS = 3;
 
 /** The kind of a read failure, a key of PROBLEM_TEXT. */
 export function problemOf(error) {
@@ -70,6 +72,7 @@ export class SolarmanHub {
     this.inFlight = null;
     this.triggerMemory = initialTriggerState();
     this.indexes = {};
+    this.jumps = {};
     this.stopped = false;
   }
 
@@ -113,6 +116,9 @@ export class SolarmanHub {
 
   /** Gladys restarted: publish the device and every state again. */
   async resync() {
+    if (!this.timer) {
+      this.#schedule(0);
+    }
     await this.#publishDevice();
     if (this.configured) {
       this.gladys.forgetPublishedStates(this.ids().device);
@@ -131,6 +137,9 @@ export class SolarmanHub {
     this.lastProblem = null;
     this.triggerMemory = initialTriggerState();
     this.indexes = {};
+    this.jumps = {};
+    this.inFlight = null; // a read of the old client ends on its own, unheard
+    this.reportedConnected = null;
     const problem = configProblem(config);
     if (problem) {
       await this.gladys.publishDiscoveredDevices([]);
@@ -144,8 +153,9 @@ export class SolarmanHub {
       slaveId: config.slave_id,
       ...this.clientOptions,
     });
-    await this.#publishDevice();
+    // The timer first: a failed publication must not leave the inverter unread.
     this.#schedule(0);
+    await this.#publishDevice();
   }
 
   async #publishDevice() {
@@ -215,7 +225,10 @@ export class SolarmanHub {
     this.reading = reading;
     this.readAt = new Date();
     logger.debug(`Read: ${JSON.stringify(reading)}`);
-    await this.gladys.setConnectionStatus(true).catch(() => {});
+    if (this.reportedConnected !== true) {
+      await this.gladys.setConnectionStatus(true).catch(() => {});
+      this.reportedConnected = true;
+    }
     await this.#publishStates();
     await this.#fireTriggers(reading);
     if (wasOffline) {
@@ -234,6 +247,7 @@ export class SolarmanHub {
     this.lastProblem = problem;
     if (this.failures === OFFLINE_AFTER) {
       await this.gladys.setConnectionStatus(false, CONNECTION_TEXT.unreachable).catch(() => {});
+      this.reportedConnected = false;
       this.gladys.requestWidgetRefresh(WIDGET_KEY);
     }
     if (this.failures >= OFFLINE_AFTER) {
@@ -263,11 +277,20 @@ export class SolarmanHub {
         continue;
       }
       const last = this.indexes[key];
-      if (values[key] <= 0 || (last !== undefined && values[key] < last)) {
+      // 0 after a logger restart, a decrease, or a jump no inverter makes
+      // between two reads (ha-solarman guards the Deye totals the same way):
+      // skipped, and never kept as the reference.
+      // A jump read again and again is real (a long outage of Gladys or of
+      // the logger): accepted at the JUMP_CONFIRMATIONS-th read.
+      const jump = last !== undefined && values[key] - last > MAX_INDEX_STEP_KWH;
+      const confirmed =
+        jump && (this.jumps[key] = (this.jumps[key] ?? 0) + 1) >= JUMP_CONFIRMATIONS;
+      if (values[key] <= 0 || (last !== undefined && values[key] < last) || (jump && !confirmed)) {
         logger.debug(`Index ${key} skipped: ${values[key]} after ${last}`);
         delete values[key];
       } else {
         this.indexes[key] = values[key];
+        this.jumps[key] = 0;
       }
     }
     return values;
@@ -342,6 +365,7 @@ export class SolarmanHub {
   }
 
   async #tick() {
+    const client = this.client;
     const periodMs = this.intervalMs ?? this.config.poll_interval * 1000;
     try {
       // Read only for an added device, and not twice within half a period
@@ -353,7 +377,10 @@ export class SolarmanHub {
     } catch (err) {
       logger.error('Reading cycle failed', err);
     } finally {
-      this.#schedule(periodMs);
+      // Reconfigured meanwhile: the new configuration has its own timer.
+      if (this.client === client) {
+        this.#schedule(periodMs);
+      }
     }
   }
 

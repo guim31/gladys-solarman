@@ -105,3 +105,8 @@ test('a heartbeat is answered with the matching response code', () => {
   assert.equal(answer.readUInt32LE(7), SERIAL);
   assert.equal(splitFrames(answer).frames.length, 1);
 });
+
+test('a stray start byte announcing a huge frame does not freeze the stream', () => {
+  const { frames } = splitFrames(Buffer.concat([Buffer.from([0xa5, 0xff, 0xff]), DEYE_RESPONSE]));
+  assert.deepEqual(frames, [DEYE_RESPONSE]);
+});

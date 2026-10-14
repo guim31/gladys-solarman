@@ -279,7 +279,11 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
   (SG01HP3) comptent PV et batterie en dizaines de watts (`mod` 1 d'ha-solarman) : profil à part.
 - Solis 1P-5G : registres d'**entrée** (fonction 4) ; codes d'état ≥ 0x1000 = défauts.
 - Micro-onduleur Deye et Solis : pas de registre de puissance par entrée, puissance = U × I.
-- Un index d'énergie à 0 ou en baisse n'est **pas publié** (Deye renvoie 0 quelques lectures après
+- **Une valeur 32 bits se lit en une seule requête** (test « no torn 32-bit value ») : lus en deux
+  requêtes, les mots bas et haut d'une puissance qui passe par 0 W donnent un pic de ±65 kW (relevé
+  en relecture sur le Deye triphasé, d'où une plage unique 0x24a-0x2b6).
+- Un index d'énergie à 0, en baisse ou qui saute de plus de 100 kWh entre deux lectures n'est **pas
+  publié** ni gardé comme référence (un saut relu 3 fois est accepté : longue coupure ; Deye renvoie 0 quelques lectures après
   un redémarrage, ha-solarman le filtre aussi). Niveau de batterie hors 0-100 ignoré.
 
 **Choix de conception**

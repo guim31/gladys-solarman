@@ -30,6 +30,8 @@ const HEADER_LENGTH = 11;
 const RESPONSE_PAYLOAD_PREFIX = 14;
 // header + checksum + end: a frame is this plus its payload length.
 const ENVELOPE = 13;
+// 125 registers + headers is about 290 bytes.
+const MAX_FRAME = 1024;
 
 export class V5Error extends Error {
   constructor(message, code) {
@@ -144,6 +146,11 @@ export function splitFrames(buffer) {
       return { frames, rest: buffer.subarray(start) };
     }
     const total = ENVELOPE + buffer.readUInt16LE(start + 1);
+    if (total > MAX_FRAME) {
+      // A stray start byte: a real frame is never that long.
+      offset = start + 1;
+      continue;
+    }
     if (buffer.length - start < total) {
       return { frames, rest: buffer.subarray(start) };
     }

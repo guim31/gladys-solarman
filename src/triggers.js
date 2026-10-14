@@ -97,7 +97,10 @@ export function evaluate(memory, reading, { exportThreshold }) {
     if (memory.exporting === false && exporting === true) {
       events.push({ key: TRIGGERS.EXPORT_STARTED, data: { power: Math.round(exported) } });
     } else if (memory.exporting === true && exporting === false) {
-      events.push({ key: TRIGGERS.EXPORT_STOPPED, data: { power: Math.round(exported) } });
+      events.push({
+        key: TRIGGERS.EXPORT_STOPPED,
+        data: { power: Math.max(0, Math.round(exported)) },
+      });
     }
     memory.exporting = exporting ?? false;
   }

@@ -64,7 +64,7 @@ export class SolarmanClient {
     return result;
   }
 
-  /** Closes the connection; the next request opens a new one unless `close()` was final. */
+  /** Closes the connection for good: every later request is refused. */
   close() {
     this.closed = true;
     this.#drop(new V5Error('Connection closed', 'closed'));
@@ -75,6 +75,9 @@ export class SolarmanClient {
       throw new V5Error('Connection closed', 'closed');
     }
     const socket = await this.#connect();
+    if (this.closed) {
+      throw new V5Error('Connection closed', 'closed');
+    }
     this.sequence = (this.sequence + 1) & 0xff;
     const sequence = this.sequence;
     const frame = encodeRequest(
@@ -124,6 +127,12 @@ export class SolarmanClient {
       }, this.timeoutMs);
       socket.once('connect', () => {
         clearTimeout(timer);
+        if (this.closed) {
+          // close() arrived while connecting: never keep a second client on the logger.
+          socket.destroy();
+          reject(new V5Error('Connection closed', 'closed'));
+          return;
+        }
         socket.setKeepAlive(true, 30_000);
         this.socket = socket;
         this.buffer = Buffer.alloc(0);

@@ -130,3 +130,16 @@ test('a battery level out of 0-100 is dropped, unused PV inputs still count in t
   assert.deepEqual(reading.strings, [1820, 1390]);
   assert.equal(reading.pvPower, 1820 + 1390 + 300);
 });
+
+test('every multi-register value is read in ONE request (no torn 32-bit value)', () => {
+  for (const profile of Object.values(PROFILES)) {
+    const rangeOf = (address) =>
+      profile.ranges.findIndex(([start, count]) => address >= start && address < start + count);
+    for (const [key, spec] of Object.entries(profile.values)) {
+      if (key !== 'strings' && spec.regs.length > 1) {
+        const ranges = new Set(spec.regs.map(rangeOf));
+        assert.equal(ranges.size, 1, `${profile.key}.${key} spans two requests`);
+      }
+    }
+  }
+});
