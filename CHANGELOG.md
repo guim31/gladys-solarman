@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-14
+
 ### Added
 
 - Local reading of solar inverters fitted with a Solarman Wi-Fi logger (LSW-3,
@@ -33,3 +35,6 @@ the notes of the version's GitHub Release.
   values as numbers.
 - A "Test the connection" action in the configuration.
 - English, French, German and Spanish.
+
+[Unreleased]: https://github.com/guim31/gladys-solarman/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/guim31/gladys-solarman/releases/tag/v1.0.0
