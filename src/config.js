@@ -1,45 +1,86 @@
 // -----------------------------------------------------------------------------
-// Integration configuration.
-//
-// The configuration is filled in by the user in Gladys, from the `config_schema`
-// declared in `gladys-assistant-integration.json`. The SDK fetches it for you
-// (`gladys.getConfig()`) and notifies you of every change through
-// `gladys.onConfigUpdated()`.
-//
-// This module only provides defaults and normalizes the received object, so the
-// rest of the code never has to deal with `undefined`.
+// Integration configuration: defaults (mirroring the manifest `config_schema`)
+// and normalization, so the rest of the code never deals with strings or
+// `undefined`.
 // -----------------------------------------------------------------------------
 
-// Defaults: they MUST stay consistent with the `default` values declared in the
-// `config_schema` of the manifest.
+import { DEFAULT_PROFILE, PROFILES } from './profiles.js';
+
+export const LANGUAGES = ['en', 'fr', 'de', 'es'];
+
 export const DEFAULT_CONFIG = {
-  latitude: 48.8566, // Paris
-  longitude: 2.3522,
-  unit: 'celsius', // 'celsius' | 'fahrenheit'
-  // Seconds between two reads of the polled sensors. Gladys polls at most once
-  // a minute: slower intervals are applied by skipping polls (see
-  // createPoller in src/devices/index.js).
-  poll_frequency: 300,
-  // Reserved key (NOT in config_schema): because the manifest declares both
-  // 'local' and 'cloud' in its `transports` field, Gladys shows a standard
-  // "Prefer the local connection" toggle and sends the user's choice here.
-  // Read-only for the integration; defaults to true.
-  GLADYS_PREFER_LOCAL: true,
+  host: '',
+  serial: '',
+  profile: DEFAULT_PROFILE,
+  port: 8899,
+  slave_id: 1,
+  pv_inputs: 2,
+  poll_interval: 30,
+  export_threshold: 100,
+  language: 'fr',
 };
 
+export const MIN_POLL_INTERVAL = 15;
+export const MAX_POLL_INTERVAL = 3600;
+
+function integer(value, fallback, min, max) {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return fallback;
+  }
+  const number = Number(String(value ?? '').trim());
+  if (!Number.isInteger(number)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, number));
+}
+
 /**
- * Merge the user config with the defaults.
- * @param {Record<string, unknown>} raw config returned by the SDK
+ * The logger serial number: 10 digits printed on the stick (17xxxxxxxx,
+ * 21xxxxxxxx, 23xxxxxxxx, 27xxxxxxxx, 40xxxxxxxx...), a 32-bit number.
+ * @returns {number|null}
  */
+export function parseSerial(value) {
+  const text = String(value ?? '').replace(/\s+/g, '');
+  if (!/^\d{1,10}$/.test(text)) {
+    return null;
+  }
+  const serial = Number(text);
+  return serial > 0 && serial <= 0xffffffff ? serial : null;
+}
+
+/** A host name or an IPv4/IPv6 address, without scheme, port or path. */
+export function parseHost(value) {
+  const text = String(value ?? '').trim();
+  return /^[A-Za-z0-9.:-]{1,253}$/.test(text) ? text : null;
+}
+
 export function normalizeConfig(raw = {}) {
+  const config = raw ?? {};
   return {
-    ...DEFAULT_CONFIG,
-    ...raw,
-    // Force the types: config may arrive as strings from a form.
-    latitude: Number(raw.latitude ?? DEFAULT_CONFIG.latitude),
-    longitude: Number(raw.longitude ?? DEFAULT_CONFIG.longitude),
-    poll_frequency: Number(raw.poll_frequency ?? DEFAULT_CONFIG.poll_frequency),
-    // The preference is a boolean; anything but an explicit false means true.
-    GLADYS_PREFER_LOCAL: raw.GLADYS_PREFER_LOCAL !== false,
+    host: parseHost(config.host),
+    serial: parseSerial(config.serial),
+    profile: PROFILES[config.profile] ? config.profile : DEFAULT_CONFIG.profile,
+    port: integer(config.port, DEFAULT_CONFIG.port, 1, 65535),
+    slave_id: integer(config.slave_id, DEFAULT_CONFIG.slave_id, 1, 247),
+    pv_inputs: integer(config.pv_inputs, DEFAULT_CONFIG.pv_inputs, 1, 4),
+    poll_interval: integer(
+      config.poll_interval,
+      DEFAULT_CONFIG.poll_interval,
+      MIN_POLL_INTERVAL,
+      MAX_POLL_INTERVAL,
+    ),
+    export_threshold: integer(config.export_threshold, DEFAULT_CONFIG.export_threshold, 10, 100000),
+    language: LANGUAGES.includes(config.language) ? config.language : DEFAULT_CONFIG.language,
   };
+}
+
+/** What is missing for the integration to read the logger, or null. */
+export function configProblem(config) {
+  if (!config.host) {
+    return 'host';
+  }
+  if (!config.serial) {
+    return 'serial';
+  }
+  return null;
 }

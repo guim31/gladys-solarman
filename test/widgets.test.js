@@ -1,77 +1,73 @@
+// -----------------------------------------------------------------------------
+// The `solar` widget: valid for the core (SDK validator: budget, sizes), in
+// every state (not configured, not added, live, offline), its bound features
+// existing on the device.
+// -----------------------------------------------------------------------------
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { validateWidgetContent } from '@gladysassistant/integration-sdk';
-import { createFakeGladys } from '@gladysassistant/integration-sdk/testing';
-import { buildDiscoveredDevices } from '../src/devices/index.js';
-import { simulateLanSession } from '../src/devices/plug.js';
-import { DEMO_STATUS_WIDGET, WIDGETS, refreshWidgets } from '../src/widgets.js';
-import { normalizeConfig } from '../src/config.js';
+import { LANGUAGES } from '../src/config.js';
+import { OFFLINE_AFTER } from '../src/hub.js';
+import { PROFILES } from '../src/profiles.js';
+import { createWorld } from './helpers/world.js';
 
-const gladys = createFakeGladys();
-const config = normalizeConfig();
-const demoStatus = WIDGETS[DEMO_STATUS_WIDGET];
+async function content(world, language = 'en') {
+  const ack = await world.fake.widgetGet('solar', { settings: {}, language });
+  assert.equal(ack.success, true);
+  return ack.data.content;
+}
 
-// What the SDK passes to onWidgetGet, plus the config index.js adds.
-const getContent = (cfg = config) =>
-  demoStatus.get(gladys, { settings: {}, language: 'en', units: 'metric', config: cfg });
-
-test('the demo_status content is rendered exactly as sent', async () => {
-  // [] = nothing the core would drop, truncate or trim to the content budget.
-  assert.deepEqual(validateWidgetContent(await getContent()), []);
-});
-
-test('the degraded plug connection content is valid too', async () => {
-  simulateLanSession(false);
-  try {
-    const content = await getContent();
-    assert.deepEqual(validateWidgetContent(content), []);
-    const status = content.components.find((component) => component.type === 'status');
-    assert.ok(
-      status.items.some((item) => item.color === 'warning'),
-      'degraded shows a warning',
-    );
-  } finally {
-    simulateLanSession(true);
-  }
-});
-
-test('the live tiles reference features the integration publishes', async () => {
-  const featureIds = new Set(
-    buildDiscoveredDevices(gladys, config).flatMap((device) =>
-      device.features.map((feature) => feature.external_id),
-    ),
+function check(world, widget, where) {
+  assert.deepEqual(validateWidgetContent(widget), [], where);
+  const ids = new Set(
+    (world.fake.discoveredDevices[0]?.features ?? []).map((feature) => feature.external_id),
   );
-  const liveTiles = (await getContent()).components.filter((c) => c.device_feature);
-  assert.ok(liveTiles.length > 0, 'the template demonstrates a device-bound tile');
-  for (const tile of liveTiles) {
-    assert.ok(featureIds.has(tile.device_feature), `unknown feature ${tile.device_feature}`);
+  for (const component of widget.components) {
+    if (component.device_feature) {
+      assert.ok(ids.has(component.device_feature), `${where}: ${component.device_feature}`);
+    }
   }
+}
+
+for (const profile of Object.keys(PROFILES)) {
+  test(`the solar widget of a ${profile} is valid, before and after adding it, and offline`, async (t) => {
+    const world = await createWorld({ profile, config: { pv_inputs: 4 } });
+    t.after(() => world.stop());
+    for (const language of LANGUAGES) {
+      check(world, await content(world, language), `${profile} not added (${language})`);
+    }
+    const before = await content(world);
+    assert.match(before.components.at(-1).text, /Discovery tab/);
+
+    await world.fake.deviceCreated(world.fake.discoveredDevices[0]);
+    await world.hub.inFlight;
+    const live = await content(world, 'fr');
+    check(world, live, `${profile} live`);
+    assert.equal(live.components[0].device_feature, world.ids().feature('pv_power'));
+
+    world.logger.silent = true;
+    for (let i = 0; i < OFFLINE_AFTER; i += 1) {
+      await world.hub.refresh();
+    }
+    const offline = await content(world);
+    check(world, offline, `${profile} offline`);
+    assert.match(offline.components.at(-1).text, /not answering/);
+  });
+}
+
+test('the widget asks for the configuration first', async (t) => {
+  const world = await createWorld({ config: { host: '' } });
+  t.after(() => world.stop());
+  const widget = await content(world, 'de');
+  assert.deepEqual(validateWidgetContent(widget), []);
+  assert.match(widget.components[0].text, /Konfiguriere/);
 });
 
-test('every button action of the content is handled and answers a short toast', async () => {
-  const buttons = (await getContent()).components.filter((c) => c.type === 'button' && c.action);
-  assert.ok(buttons.length > 0, 'the template demonstrates a widget action');
-  for (const { action } of buttons) {
-    const message = await demoStatus.action(gladys, {
-      actionKey: action.key,
-      params: action.params ?? {},
-      settings: {},
-      config,
-    });
-    assert.ok(message.en, 'the toast carries at least the mandatory `en` text');
-    assert.ok(message.en.length <= 200, 'toasts are capped at 200 characters');
-  }
-});
-
-test('an unknown widget action fails, so the user sees the error', async () => {
-  await assert.rejects(
-    demoStatus.action(gladys, { actionKey: 'unknown', params: {}, settings: {}, config }),
-    /Unknown widget action/,
-  );
-});
-
-test('refreshWidgets nudges every widget', () => {
-  const fresh = createFakeGladys();
-  refreshWidgets(fresh);
-  assert.deepEqual(fresh.fake.widgetRefreshes, Object.keys(WIDGETS));
+test('the grid and battery tiles say which way the power flows', async (t) => {
+  const world = await createWorld({ created: true });
+  t.after(() => world.stop());
+  const labels = (await content(world)).components.map((c) => `${c.label}:${c.value ?? 'live'}`);
+  assert.ok(labels.includes('Grid export:350'));
+  assert.ok(labels.includes('Charging:1650'));
 });

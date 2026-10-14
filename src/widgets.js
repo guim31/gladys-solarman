@@ -1,169 +1,222 @@
 // -----------------------------------------------------------------------------
-// Dashboard widgets (SDK v0.14+, Gladys 5.1+).
+// Dashboard widget (manifest `widgets`, Gladys 5.1+): `solar`.
 //
-// A widget puts the integration's own data on the Gladys dashboard without a
-// dedicated core widget. The manifest `widgets` field declares its identity
-// (key, label, icon, optional per-instance `settings`); at runtime the
-// integration returns a DECLARATIVE content — `text`, `value`, `gauge`,
-// `status`, `chart`, `card-list`, `image`, `button` — that the core renders
-// with its own theme, dark mode and translations. No HTML, no CSS.
+// The power flows of the house in one card: solar production, house
+// consumption, grid exchange (one signed tile, "Import" or "Export"), battery
+// level and power, production of the day, and the inverter state.
 //
-// Each entry of WIDGETS is keyed by the widget `key` and exposes:
-//   - get(gladys, { settings, language, units, config }): the content,
-//     registered by index.js with `gladys.onWidgetGet(key, ...)`;
-//   - action(gladys, { actionKey, params, settings, config }) (optional): a
-//     tapped `button` carrying an `action`, registered with
-//     `gladys.onWidgetAction`.
-//
-// Check your contents in the tests with `validateWidgetContent` (exported by
-// the SDK, see test/widgets.test.js), or run with DEBUG=gladys-integration-sdk
-// to have the SDK log every violation of the vocabulary and the budget.
+// Budget (8 components, 2 texts, 1 status): six tiles, a status list, a
+// caption. Tiles of a value Gladys stores are bound to the feature once the
+// device is added (live); the signed ones (grid, battery power) are written by
+// the integration and refreshed by the TTL.
 // -----------------------------------------------------------------------------
 
-import {
-  createLogger,
-  DEVICE_FEATURE_CATEGORIES,
-  DEVICE_TRANSPORTS,
-  WIDGET_COLORS,
-} from '@gladysassistant/integration-sdk';
-import { identifyDevice } from './devices/index.js';
-import { weatherStation } from './devices/weatherStation.js';
-import { plug } from './devices/plug.js';
-import { light } from './devices/light.js';
+import { WIDGET_COLORS } from '@gladysassistant/integration-sdk';
+import { WIDGET_KEY } from './hub.js';
+import { stateText } from './texts.js';
 
-const logger = createLogger({ name: 'widgets' });
+const TTL_SECONDS = 30;
 
-// Widget key, as declared in the manifest `widgets` field.
-export const DEMO_STATUS_WIDGET = 'demo_status';
-
-// Keys of the `button` actions the demo_status content declares.
-const DEMO_STATUS_ACTIONS = { IDENTIFY_LIGHT: 'identify_light' };
-
-// How the plug transport reads in the status list.
-const TRANSPORT_STATUS = {
-  [DEVICE_TRANSPORTS.LOCAL]: { value: { en: 'Local', fr: 'Locale' }, color: WIDGET_COLORS.SUCCESS },
-  [DEVICE_TRANSPORTS.CLOUD]: { value: { en: 'Cloud', fr: 'Cloud' }, color: WIDGET_COLORS.INFO },
-  [DEVICE_TRANSPORTS.UNREACHABLE]: {
-    value: { en: 'Unreachable', fr: 'Injoignable' },
-    color: WIDGET_COLORS.DANGER,
+export const TEXT = {
+  notConfigured: {
+    en: 'Configure the Solarman logger in the integration settings.',
+    fr: "Configurez le logger Solarman dans les réglages de l'intégration.",
+    de: 'Konfiguriere den Solarman-Logger in den Einstellungen der Integration.',
+    es: 'Configure el logger Solarman en los ajustes de la integración.',
+  },
+  notCreated: {
+    en: 'Add the inverter from the Discovery tab of the integration.',
+    fr: "Ajoutez l'onduleur depuis l'onglet Découverte de l'intégration.",
+    de: 'Füge den Wechselrichter über den Tab „Entdecken“ der Integration hinzu.',
+    es: 'Añada el inversor desde la pestaña Descubrir de la integración.',
+  },
+  offline: {
+    en: 'The logger is not answering: last values shown.',
+    fr: 'Le logger ne répond pas : dernières valeurs affichées.',
+    de: 'Der Logger antwortet nicht: letzte Werte angezeigt.',
+    es: 'El logger no responde: se muestran los últimos valores.',
+  },
+  solar: { en: 'Solar', fr: 'Solaire', de: 'Solar', es: 'Solar' },
+  house: { en: 'House', fr: 'Maison', de: 'Haus', es: 'Casa' },
+  import: { en: 'Grid import', fr: 'Soutirage', de: 'Netzbezug', es: 'Importación' },
+  export: { en: 'Grid export', fr: 'Injection', de: 'Einspeisung', es: 'Exportación' },
+  battery: { en: 'Battery', fr: 'Batterie', de: 'Batterie', es: 'Batería' },
+  charging: { en: 'Charging', fr: 'Charge', de: 'Ladung', es: 'Carga' },
+  discharging: { en: 'Discharging', fr: 'Décharge', de: 'Entladung', es: 'Descarga' },
+  today: { en: 'Today', fr: "Aujourd'hui", de: 'Heute', es: 'Hoy' },
+  inverter: { en: 'Inverter', fr: 'Onduleur', de: 'Wechselrichter', es: 'Inversor' },
+  lastRead: {
+    en: 'Last reading',
+    fr: 'Dernière lecture',
+    de: 'Letzte Messung',
+    es: 'Última lectura',
   },
 };
 
-// A live tile references a feature by its external_id: read it from the
-// discovery payload itself, so the widget and the device never disagree.
-function featureExternalId(gladys, config, blueprint, category) {
-  const device = blueprint.buildDevice(gladys, config);
-  return device.features.find((feature) => feature.category === category).external_id;
+const t = (text, language) => text[language] ?? text.en;
+const STATE_COLOR = {
+  normal: WIDGET_COLORS.SUCCESS,
+  standby: WIDGET_COLORS.NEUTRAL,
+  starting: WIDGET_COLORS.INFO,
+  alarm: WIDGET_COLORS.WARNING,
+  fault: WIDGET_COLORS.DANGER,
+  offline: WIDGET_COLORS.DANGER,
+};
+
+function message(text, language) {
+  return {
+    ttl_seconds: TTL_SECONDS,
+    components: [{ type: 'text', variant: 'body', text: t(text, language) }],
+  };
 }
 
-function plugConnectionStatus(gladys, config) {
-  const { transport, degraded } = plug.transport(gladys, config);
-  const { value, color } = TRANSPORT_STATUS[transport];
-  if (degraded) {
-    return {
-      value: { en: `${value.en} (degraded mode)`, fr: `${value.fr} (mode dégradé)` },
-      color: WIDGET_COLORS.WARNING,
-    };
+/** A tile bound to its feature when the device exists, else the value read. */
+function tile(hub, created, { key, label, icon, value, unit, color }, language) {
+  const base = { type: 'value', label: t(label, language), icon, ...(color ? { color } : {}) };
+  if (created) {
+    return { ...base, device_feature: hub.ids().feature(key) };
   }
-  return { value, color };
+  return { ...base, value: typeof value === 'number' ? Math.round(value) : '-', unit };
+}
+
+function clock(date, language, timeZone) {
+  return new Intl.DateTimeFormat(language, { hour: '2-digit', minute: '2-digit', timeZone }).format(
+    date,
+  );
+}
+
+/**
+ * The widget content.
+ * @param {object} hub
+ * @param {object} request `{ settings, language }`
+ */
+export function solarWidget(hub, { language = 'en' } = {}) {
+  if (!hub.configured) {
+    return message(TEXT.notConfigured, language);
+  }
+  const created = hub.isCreated();
+  const reading = hub.reading ?? {};
+  const online = hub.online;
+  const components = [];
+  const has = (key) => typeof reading[key] === 'number';
+  const pv = online ? reading.pvPower : 0;
+
+  components.push(
+    tile(
+      hub,
+      created,
+      {
+        key: 'pv_power',
+        label: TEXT.solar,
+        icon: 'sun',
+        value: pv,
+        unit: 'W',
+        color: WIDGET_COLORS.SUCCESS,
+      },
+      language,
+    ),
+  );
+  if (has('loadPower')) {
+    components.push(
+      tile(
+        hub,
+        created,
+        {
+          key: 'load_power',
+          label: TEXT.house,
+          icon: 'home',
+          value: Math.max(0, reading.loadPower),
+          unit: 'W',
+        },
+        language,
+      ),
+    );
+  }
+  if (has('gridPower')) {
+    const exporting = reading.gridPower < 0;
+    components.push({
+      type: 'value',
+      label: t(exporting ? TEXT.export : TEXT.import, language),
+      icon: exporting ? 'upload' : 'download',
+      value: Math.abs(Math.round(reading.gridPower)),
+      unit: 'W',
+      color: exporting ? WIDGET_COLORS.SUCCESS : WIDGET_COLORS.WARNING,
+    });
+  }
+  if (has('batteryLevel')) {
+    components.push(
+      tile(
+        hub,
+        created,
+        {
+          key: 'battery_level',
+          label: TEXT.battery,
+          icon: 'battery',
+          value: reading.batteryLevel,
+          unit: '%',
+        },
+        language,
+      ),
+    );
+  }
+  if (has('batteryPower')) {
+    const charging = reading.batteryPower < 0;
+    components.push({
+      type: 'value',
+      label: t(charging ? TEXT.charging : TEXT.discharging, language),
+      icon: charging ? 'battery-charging' : 'zap',
+      value: Math.abs(Math.round(reading.batteryPower)),
+      unit: 'W',
+    });
+  }
+  if (has('productionToday')) {
+    components.push(
+      created
+        ? tile(
+            hub,
+            true,
+            { key: 'production_today', label: TEXT.today, icon: 'calendar' },
+            language,
+          )
+        : {
+            type: 'value',
+            label: t(TEXT.today, language),
+            icon: 'calendar',
+            value: Math.round(reading.productionToday * 10) / 10,
+            unit: 'kWh',
+          },
+    );
+  }
+
+  const state = online ? reading.state : 'offline';
+  const items = [];
+  if (state) {
+    items.push({
+      label: t(TEXT.inverter, language),
+      value: stateText(language, state),
+      color: STATE_COLOR[state] ?? WIDGET_COLORS.NEUTRAL,
+    });
+  }
+  if (hub.readAt) {
+    items.push({
+      label: t(TEXT.lastRead, language),
+      value: clock(hub.readAt, language, process.env.TZ || undefined),
+      icon: 'clock',
+    });
+  }
+  if (items.length > 0) {
+    components.push({ type: 'status', items });
+  }
+  if (!created) {
+    components.push({ type: 'text', variant: 'caption', text: t(TEXT.notCreated, language) });
+  } else if (!online) {
+    components.push({ type: 'text', variant: 'caption', text: t(TEXT.offline, language) });
+  }
+  return { ttl_seconds: TTL_SECONDS, components };
 }
 
 export const WIDGETS = {
-  [DEMO_STATUS_WIDGET]: {
-    // `settings` holds the per-instance values of the declared `settings`
-    // (none here); `language` and `units` are those of the user viewing the
-    // dashboard, for the values you format yourself. Multi-language objects
-    // (`{ en, fr }`) are picked by the core, like everywhere else.
-    async get(gladys, { config }) {
-      logger.debug(`onWidgetGet <- ${DEMO_STATUS_WIDGET}`);
-      return {
-        // Reload policy: the computed parts below only change with the
-        // config, and index.js nudges the widget on every (re)connection and
-        // config update (see refreshWidgets) — the TTL is just a safety net.
-        ttl_seconds: 300,
-        components: [
-          // Device-bound tiles: LIVE, they follow the published states over
-          // the core's real-time path. No TTL, no nudge involved.
-          {
-            type: 'value',
-            label: { en: 'Temperature', fr: 'Température' },
-            icon: 'thermometer',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              weatherStation,
-              DEVICE_FEATURE_CATEGORIES.TEMPERATURE_SENSOR,
-            ),
-          },
-          {
-            type: 'value',
-            label: { en: 'Office plug', fr: 'Prise du bureau' },
-            icon: 'zap',
-            device_feature: featureExternalId(
-              gladys,
-              config,
-              plug,
-              DEVICE_FEATURE_CATEGORIES.ENERGY_SENSOR,
-            ),
-          },
-          // Computed rows: what the integration knows that no device feature
-          // carries. Served from the core cache until the TTL or a nudge.
-          {
-            type: 'status',
-            items: [
-              {
-                label: { en: 'Plug connection', fr: 'Connexion de la prise' },
-                icon: 'wifi',
-                ...plugConnectionStatus(gladys, config),
-              },
-              {
-                label: { en: 'Observed location', fr: 'Position observée' },
-                icon: 'map-pin',
-                value: `${config.latitude.toFixed(2)}, ${config.longitude.toFixed(2)}`,
-                color: WIDGET_COLORS.NEUTRAL,
-              },
-            ],
-          },
-          // `params` are declared HERE and sent back as-is: the handler never
-          // receives user input (a dashboard can hang on a public wall).
-          {
-            type: 'button',
-            label: { en: 'Identify the light', fr: 'Identifier la lampe' },
-            icon: 'eye',
-            style: 'secondary',
-            action: {
-              key: DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT,
-              params: { device: light.deviceExternalId(gladys) },
-            },
-          },
-        ],
-      };
-    },
-
-    // Resolve an optional toast (string or multi-language object, ≤ 200
-    // characters). After a successful action the core drops the cached
-    // content and every open dashboard refetches it: no nudge needed.
-    async action(gladys, { actionKey, params, config }) {
-      logger.info(`onWidgetAction <- ${DEMO_STATUS_WIDGET}.${actionKey}`);
-      if (actionKey === DEMO_STATUS_ACTIONS.IDENTIFY_LIGHT) {
-        return identifyDevice(gladys, params.device, config);
-      }
-      // Throwing acks the action as failed: the message reaches the user.
-      throw new Error(`Unknown widget action: ${actionKey}`);
-    },
+  [WIDGET_KEY]: {
+    get: (hub, request) => solarWidget(hub, request),
   },
 };
-
-/**
- * Freshness nudge: ask the core to re-pull every widget NOW instead of
- * waiting for the content TTL. Call it when you KNOW a computed content
- * changed (here: the config, which drives the plug transport and the observed
- * location) — and after every (re)connection, since the nudges are
- * fire-and-forget: rate-limited core-side to 1 per 10 s per widget, dropped
- * silently while disconnected.
- */
-export function refreshWidgets(gladys) {
-  for (const key of Object.keys(WIDGETS)) {
-    gladys.requestWidgetRefresh(key);
-  }
-}
