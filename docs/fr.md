@@ -1,67 +1,197 @@
-# Template de démonstration
+# Solarman (Deye, Sofar, Solis)
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Lisez dans Gladys, sur votre réseau local, un onduleur solaire équipé d'un
+**logger Wi-Fi Solarman** (la clé « LSW-3 » livrée avec les onduleurs Deye,
+Sunsynk, Sol-Ark, Sofar, Solis et bien d'autres) : production solaire par
+entrée PV, consommation de la maison, soutirage et injection sur le réseau,
+niveau et puissance de la batterie, énergies du jour et index pour l'onglet
+énergie de Gladys, avec un widget de tableau de bord, cinq déclencheurs et une
+action de scène. Ni compte ni cloud : Gladys parle directement au logger avec
+le protocole Solarman V5 (port TCP 8899), celui de l'application Solarman.
+**Lecture seule** : rien n'est jamais écrit dans l'onduleur.
 
-## Ce que vous obtenez
+> **Développée sans le matériel : vos retours sont les bienvenus.** Cette
+> intégration a été écrite d'après les cartes de registres publiées de ces
+> onduleurs, un vrai échange avec un logger Deye et un logger simulé, pas sur
+> un vrai onduleur. Si quelque chose ne marche pas comme décrit, dites-le sur
+> le [forum Gladys](https://community.gladysassistant.com) ou dans les
+> [issues](https://github.com/guim31/gladys-solarman/issues).
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+## Ce qu'il faut
+
+- Gladys Assistant 5.1.0 ou plus récent.
+- Un onduleur avec un logger Wi-Fi Solarman dont le numéro de série commence
+  par 17, 21, 23, 27 ou 40 (10 chiffres, sur l'étiquette du logger), branché
+  sur le même réseau que Gladys. Modèles pris en charge :
+  - **Deye hybride monophasé** (SUN-…K-SG0xLP1, et les Sunsynk et Sol-Ark
+    qui en dérivent) ;
+  - **Deye hybride triphasé**, batterie basse tension (SG04LP3) ou haute
+    tension (SG01HP3) ;
+  - **Deye micro-onduleur** (SUN-M, SUN600/800/2000G3…) ;
+  - **Sofar G3** (KTLX-G3 triphasé, sans batterie) ;
+  - **Solis monophasé** (1P…-5G, sans batterie).
+- Une adresse IP fixe pour le logger (une réservation DHCP dans votre box).
 
 ## Configuration
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+1. Dans Gladys, allez dans **Intégrations → Installer depuis GitHub** et
+   saisissez `https://github.com/guim31/gladys-solarman`.
+2. Dans la configuration de l'intégration, remplissez :
+   - **Adresse IP du logger** ;
+   - **Numéro de série du logger** : les 10 chiffres de l'étiquette du
+     logger, pas le numéro de série de l'onduleur ;
+   - **Modèle d'onduleur** ;
+   - **Entrées PV utilisées** : le nombre de chaînes de panneaux branchées
+     sur l'onduleur (une production par entrée) ;
+   - au besoin l'**Intervalle de lecture (s)** (30 s par défaut, 15 s
+     minimum), le **Seuil d'injection (W)** des déclencheurs d'injection,
+     l'**Adresse Modbus** (1 dans presque tous les cas), le **Port TCP du
+     logger** (8899) et la **Langue des noms de fonctionnalités**.
+3. Lancez **Tester la connexion** dans l'onglet Configuration : l'intégration
+   lit l'onduleur une fois et répond avec ce qu'elle voit, ou avec la raison
+   de l'échec.
+4. Ouvrez l'onglet **Découverte** et ajoutez l'onduleur. Ses valeurs arrivent
+   tout de suite, puis à chaque lecture.
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+## L'appareil dans Gladys
 
-## Actions
+Un appareil par onduleur, nommé d'après sa marque (par exemple « Onduleur
+solaire Deye »). Les fonctionnalités dépendent du modèle : un modèle sans
+batterie n'a aucune fonctionnalité de batterie, un micro-onduleur n'a ni
+réseau ni maison.
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+| Fonctionnalité             | Unité | Ce que c'est                                                  |
+| -------------------------- | ----- | ------------------------------------------------------------- |
+| Production solaire         | W     | production des panneaux, toutes entrées confondues            |
+| Production PV1, PV2…       | W     | production de chaque entrée PV (s'il y en a plusieurs)        |
+| Production du jour         | kWh   | énergie produite depuis minuit                                |
+| Production totale          | kWh   | index de production de l'onduleur (onglet énergie de Gladys)  |
+| Puissance réseau           | W     | positive en soutirage, négative en injection                  |
+| Soutiré aujourd’hui        | kWh   | énergie achetée au réseau depuis minuit                       |
+| Injecté aujourd’hui        | kWh   | énergie envoyée au réseau depuis minuit                       |
+| Index soutiré              | kWh   | compteur de soutirage : Gladys en tire consommation et coût   |
+| Index injecté              | kWh   | compteur d'injection                                          |
+| Consommation maison        | W     | puissance consommée par la maison                             |
+| Consommation du jour       | kWh   | énergie consommée par la maison depuis minuit                 |
+| Niveau de batterie         | %     | état de charge                                                |
+| Charge batterie            | W     | puissance qui entre dans la batterie                          |
+| Décharge batterie          | W     | puissance qui sort de la batterie                             |
+| Index de charge batterie   | kWh   | énergie chargée depuis l'installation                         |
+| Index de décharge batterie | kWh   | énergie déchargée depuis l'installation                       |
+| Température batterie       | °C    |                                                               |
+| Température onduleur       | °C    |                                                               |
+| État de l’onduleur         | texte | En veille, Démarrage, Normal, Alarme, Défaut ou Ne répond pas |
+
+**Onglet énergie.** Seul l'**Index soutiré** est compté par Gladys comme
+consommation (avec son coût) : c'est ce que votre fournisseur facture. La
+consommation de la maison ne l'est pas, puisque l'énergie produite par vos
+panneaux et consommée sur place est gratuite ; l'index de production alimente
+la production de Gladys. Si la maison est aussi lue par un compteur
+communicant (Linky…), gardez ce compteur comme compteur principal.
+
+**La nuit.** Le logger d'un onduleur sans batterie est alimenté par les
+panneaux : il s'éteint la nuit. Après trois lectures sans réponse, l'état
+passe à « Ne répond pas », la production solaire tombe à 0 W et les autres
+valeurs restent telles quelles ; tout revient seul le matin. L'intégration
+apparaît aussi déconnectée pendant ce temps.
+
+## Widget de tableau de bord
+
+**Solaire** montre d'un coup d'œil :
+
+- **Solaire** : la production des panneaux ;
+- **Maison** : la consommation de la maison ;
+- **Soutirage** ou **Injection** : l'échange avec le réseau, avec son sens ;
+- **Batterie** : le niveau de la batterie, et **Charge** ou **Décharge** avec
+  la puissance de la batterie ;
+- **Aujourd'hui** : la production du jour ;
+- l'état de l'onduleur et l'heure de la dernière lecture.
+
+Ajoutez-le depuis l'éditeur du tableau de bord (boîte « Widget
+d'intégration »). Tant que l'onduleur n'est pas ajouté dans Gladys, le widget
+le dit.
 
 ## Scènes
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+### Déclencheurs
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+- **Batterie pleine** : la batterie atteint 100 % (une fois ; à nouveau après
+  être redescendue à 95 %). Variable : le niveau de la batterie.
+- **La batterie descend à…** : le niveau de la batterie descend au seuil
+  choisi (de 10 à 50 %) ou en dessous. Il se déclenche à nouveau une fois le
+  niveau remonté de 5 points au-dessus du seuil. Variable : le niveau de la
+  batterie.
+- **Onduleur en défaut** : l'onduleur passe en alarme ou en défaut (choisissez
+  l'un, ou laissez vide pour les deux). Variables : l'état et son code.
+- **Injection réseau démarrée** : la maison commence à envoyer au réseau plus
+  que le **Seuil d'injection (W)** de la configuration. Variable : la
+  puissance injectée.
+- **Injection réseau arrêtée** : l'injection repasse sous la moitié de ce
+  seuil. Variable : la puissance injectée (négative en soutirage).
 
-## Tableau de bord
+Rien ne se déclenche à la première lecture après un démarrage : une batterie
+déjà basse est un état, pas un événement. Pour réagir à un niveau
+(« production au-dessus de 2 kW »), utilisez les fonctionnalités de
+l'appareil dans un déclencheur « État d'un appareil ».
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+### Actions
+
+- **Lire l'état de l'onduleur** : lit l'onduleur et fournit aux actions
+  suivantes une **Phrase d'état** à envoyer (« Solaire 2 340 W, maison
+  1 200 W, batterie 85 % (en charge 800 W), injection réseau 340 W ; 12,4 kWh
+  produits aujourd'hui ; état Normal. »), ainsi que la production solaire, la
+  consommation de la maison, la puissance réseau, le niveau de la batterie et
+  la production du jour en nombres. La phrase est écrite dans la langue de la
+  configuration.
+
+### Idées de scènes
+
+- **Profiter du surplus** : quand l'**Injection réseau démarrée** arrive,
+  allumer le chauffe-eau ou la pompe de piscine ; quand l'**Injection réseau
+  arrêtée** arrive, l'éteindre.
+- **Ménager la batterie** : quand **La batterie descend à…** 20 %, envoyer un
+  message et couper les radiateurs qui peuvent attendre.
+- **Bilan du soir** : chaque jour à 21 h, **Lire l'état de l'onduleur** et
+  envoyer la phrase d'état sur votre téléphone.
+- **Surveiller l'onduleur** : quand l'**Onduleur en défaut** se déclenche,
+  envoyer un message avec l'état.
 
 ## Dépannage
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+- **Tester la connexion répond « connexion au logger impossible »** :
+  vérifiez l'adresse IP du logger et que Gladys est sur le même réseau. Le
+  logger doit répondre sur le port 8899 (certains nouveaux loggers « LSE » ne
+  le proposent pas).
+- **« Le logger ne répond pas »** : le numéro de série est faux (le logger
+  reste muet), ou le logger est éteint (nuit, onduleur sans batterie).
+- **« Le logger répond, mais pas l'onduleur »** : vérifiez l'**Adresse
+  Modbus** (1 par défaut) et le câble entre le logger et l'onduleur.
+- **« L'onduleur refuse les registres lus »** : le modèle choisi ne
+  correspond pas à l'onduleur.
+- **Des valeurs qui semblent fausses** (une puissance 10 fois trop petite, un
+  signe inversé) : vérifiez le modèle, en particulier batterie basse ou haute
+  tension pour les Deye hybrides triphasés, et signalez-le sur le forum avec
+  une capture de l'application Solarman.
+- Plus de détails dans les logs de l'intégration, avec `LOG_LEVEL=debug`.
+
+## Limites
+
+- Lecture seule : aucun réglage de l'onduleur ne peut être modifié (mode de
+  fonctionnement, charge de la batterie, limite d'injection), par choix, pour
+  la sécurité de la batterie et du réseau.
+- Un seul onduleur par installation de l'intégration.
+- Le logger sert peu de clients à la fois : Gladys garde une seule connexion
+  et lit au plus toutes les 15 secondes. Un autre outil local qui lit le même
+  logger en même temps peut recevoir des erreurs.
+- Le cloud Solarman n'est pas utilisé et continue de fonctionner comme avant.
+- Le total de consommation de la maison n'a pas d'index dans Gladys (seulement
+  la valeur du jour), pour ne jamais être compté une seconde fois dans
+  l'onglet énergie.
+- Les autres modèles (onduleurs Deye sans batterie, hybrides Sofar et Solis,
+  Afore, KStar, Megarevo…) ne sont pas encore pris en charge : demandez-le sur
+  le forum.
+
+Cartes de registres d'après [ha-solarman](https://github.com/davidrapan/ha-solarman)
+(MIT) et protocole V5 d'après
+[pysolarmanv5](https://github.com/jmccrohan/pysolarmanv5) (MIT). Sans lien
+avec Solarman, Deye, Sofar ou Solis.

@@ -5,8 +5,10 @@ contributors.
 
 ## What this is
 
-A Gladys Assistant **external integration**: a Node.js service (Node 22+, ESM,
-no build step) that runs in its own sandboxed Docker container and talks to
+A Gladys Assistant **external integration** for solar inverters fitted with a
+Solarman Wi-Fi logger (Deye, Sofar, Solis), read locally with the Solarman V5
+protocol (Modbus RTU wrapped in V5 frames, TCP 8899), read only: a Node.js
+service (Node 22+, ESM, no build step) that runs in its own sandboxed Docker container and talks to
 Gladys through
 [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
 its only runtime dependency. It started from the official JavaScript template.
@@ -31,16 +33,23 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
+index.js                          SDK wiring only (registerHandlers + shutdown)
+src/app.js                        every SDK handler, wired to the hub (the tests use it too)
+src/hub.js                        SolarmanHub: device, reading timer, states, offline, triggers
+src/v5/frame.js                   V5 envelope, Modbus RTU read request/response, CRC, checksum
+src/v5/client.js                  one TCP connection to the logger, one request at a time
+src/profiles.js                   register maps of the supported inverters + decoding
+src/devices.js                    the Gladys device: features, names (4 languages), values
+src/triggers.js                   scene triggers (battery, fault, grid export), re-arm rules
+src/scenes.js                     the "read_status" scene action
+src/widgets.js                    the "solar" dashboard widget
+src/texts.js                      states, connection status, action reports, status sentence
 src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
-docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+docs/{en,fr,de,es}.md             user documentation, re-hosted by Gladys (en and fr mandatory)
+tools/fake-logger.mjs             a simulated Solarman logger (tests, development, Docker check)
+test/                             node --test, against the SDK's fake Gladys and the fake logger
+test/fixtures/captures.js         a real V5 exchange with a Deye logger (pysolarmanv5 #62)
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
@@ -70,8 +79,10 @@ test/                             node --test, against the SDK's fake Gladys (in
   `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
   code (defaults, action, scene and widget handlers): change both sides
   together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+- **User-facing text** is in four languages (English, French, German with
+  "du", Spanish with "usted"): manifest texts, action and widget messages,
+  feature names, and `docs/{en,fr,de,es}.md` with the same sections.
+  `test/i18n.test.js` checks them.
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
   in English. Tests never touch the network.
 
@@ -233,3 +244,86 @@ long, et sur un « Sie »/« Ihr… » de politesse en allemand. Le store exige 
 - Docs `en`, `fr`, `de`, `es` avec les mêmes sections.
 - Chauffe, ouverture, sécurité : ne rien rendre pilotable « comme un thermostat » ou par un assistant
   vocal quand une erreur serait dangereuse (leçon d'OctoPrint).
+
+## Solarman (gladys-solarman)
+
+**Protocole** (référence : pysolarmanv5, MIT, `docs/solarmanv5_protocol.rst`)
+
+- Trame V5 : `A5`, longueur de la charge (2 octets LE), code de contrôle (`10 45` requête, `10 15`
+  réponse), séquence (2 octets : le 1ᵉʳ est renvoyé tel quel, le 2ᵉ est le compteur du logger),
+  numéro de série du logger (4 octets LE), charge, somme des octets (sans le premier ni les deux
+  derniers), `15`. Requête : `02` + 14 zéros + trame Modbus RTU ; réponse : `02`, statut, 3 × uint32
+  (temps), trame RTU. Vérifié octet par octet sur un vrai échange (`test/fixtures/captures.js`).
+- **Mauvais numéro de série : le logger ne répond rien** (délai dépassé), il ne renvoie pas
+  d'erreur. Onduleur muet derrière le logger (adresse Modbus fausse) : réponse sans trame RTU.
+- Certains firmwares Deye **doublent le CRC Modbus** (deux octets `00 00` en plus, cas réel de la
+  fixture) : on n'exige que la longueur annoncée par le compteur d'octets.
+- Le logger envoie de lui-même des trames (heartbeat `47`, données `42`…) sur la même connexion :
+  on y répond par la trame d'heure, comme pysolarmanv5, sinon il peut couper.
+- Les LSW-3 supportent mal plusieurs clients et des requêtes qui se chevauchent : une seule
+  connexion gardée ouverte, une requête à la fois (`SolarmanClient`), la connexion fermée après un
+  délai dépassé (une réponse tardive serait prise pour la suivante ; l'octet de séquence la filtre
+  aussi). 125 registres au plus par requête.
+- Les nouveaux loggers « LSE » n'ont pas toujours le port 8899 : non pris en charge.
+
+**Registres** (faits repris des YAML de davidrapan/ha-solarman, MIT, réécrits dans
+`src/profiles.js`)
+
+- Valeur 32 bits = `[mot bas, mot haut]` dans l'ordre d'ha-solarman. Deye : mot bas d'abord, et
+  pour le triphasé le mot haut de la puissance réseau/maison est **loin** (0x271 / 0x2b2). Sofar :
+  mot haut d'abord (0x684/0x685).
+- Signes : réseau publié **soutirage +** (Deye brut tel quel ; Sofar ×-10), batterie **décharge +**
+  (Deye brut ; Sofar ×-10) puis éclatée en `charge-power`/`discharge-power` positives.
+- Deye : températures `(brut − 1000) × 0,1` (micro-onduleur : × 0,01 d'après ha-solarman, non
+  vérifié), état 0 veille, 1 autotest, 2 normal, 3 alarme, 4 défaut. Les hybrides triphasés HV
+  (SG01HP3) comptent PV et batterie en dizaines de watts (`mod` 1 d'ha-solarman) : profil à part.
+- Solis 1P-5G : registres d'**entrée** (fonction 4) ; codes d'état ≥ 0x1000 = défauts.
+- Micro-onduleur Deye et Solis : pas de registre de puissance par entrée, puissance = U × I.
+- Un index d'énergie à 0 ou en baisse n'est **pas publié** (Deye renvoie 0 quelques lectures après
+  un redémarrage, ha-solarman le filtre aussi). Niveau de batterie hors 0-100 ignoré.
+
+**Choix de conception**
+
+- Types d'énergie (cœur 5.2.0, comme gladys-solaredge et gladys-modbus) : seul l'**index
+  soutiré** est `energy-sensor/index` (facturé par le module Énergie) ; production
+  `energy-production-sensor/index` ; injection `grid-sensor/output-index` ; batterie
+  `battery-storage/charge-index|discharge-index` ; énergies du jour `energy-sensor/index-today`
+  (production du jour : `daily-production`). **Pas d'index de consommation maison** : aucun type
+  ne le garde hors facturation (il compterait deux fois avec le soutirage). Puissance maison :
+  `energy-sensor/power` (le cœur range la « load power » d'un onduleur là, pas en
+  `home-output-sensor`).
+- `external_id` = numéro de série du **logger** (le seul connu sans lecture préalable). Changer de
+  logger crée un nouvel appareil.
+- Lecture seule, aucun code d'écriture (choix de Guilhem : sécurité batterie/réseau).
+- Lecture par minuteur interne (`should_poll: false`, `onPoll` en repli), seulement une fois
+  l'appareil ajouté ; 30 s par défaut, 15 s minimum. Battement de 6 h (`publishChangedStates`).
+- Hors ligne après 3 lectures ratées (`OFFLINE_AFTER`) : état « Ne répond pas », production PV à
+  0 (le logger d'un onduleur sans batterie s'éteint la nuit), autres valeurs gardées, statut de
+  connexion rouge avec un message qui dit que c'est normal la nuit. Une ligne de log à la perte,
+  une au retour.
+- Une plage refusée (exception Modbus) n'empêche pas les autres : ses valeurs manquent.
+- Déclencheurs : jamais à la première lecture ; `battery_below` par marches fixes (10…50 %),
+  réarmée 5 points au-dessus ; `battery_full` à 100 %, réarmée à 95 % ; `inverter_fault` au passage
+  en alarme/défaut ; export démarré au-delà du seuil de config, arrêté sous la moitié.
+- Un seul onduleur par installation (la config porte un logger).
+
+**Non vérifié faute de matériel** : tout onduleur réel. À éprouver en priorité : signe de la
+puissance réseau et batterie sur un Deye monophasé, échelle des Deye triphasés HV, Sofar G3 et
+Solis 1P (cartes les moins éprouvées), température du micro-onduleur Deye, comportement du logger
+quand l'application Solarman locale lit en même temps.
+
+**Vérification Docker** (à refaire après un changement du client ou du hub)
+
+```bash
+sg docker -c 'docker build -t gladys-test-solarman:dev .'
+sg docker -c 'docker network create gladys-test-solarman'
+sg docker -c 'docker run -d --name gladys-test-solarman-fake --network gladys-test-solarman \
+  -v $PWD:/fake:ro -w /fake public.ecr.aws/docker/library/node:24-alpine \
+  node tools/fake-logger.mjs deye_hybrid 8899 1712345678'
+sg docker -c 'docker run --rm --network gladys-test-solarman --cap-drop ALL \
+  --security-opt no-new-privileges --read-only --memory 256m --pids-limit 256 \
+  -v gladys-test-solarman-data:/data -v $PWD/tools:/app/tools:ro -v $PWD/test:/app/test:ro \
+  -e FAKE_HOST=gladys-test-solarman-fake gladys-test-solarman:dev node tools/docker-check.mjs'
+```
+
+Puis tout supprimer (`docker rm -f`, `docker network rm`, `docker volume rm`, `docker rmi`).

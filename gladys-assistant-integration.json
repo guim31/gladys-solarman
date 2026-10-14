@@ -1,177 +1,695 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Solarman (Deye, Sofar, Solis)",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Deye, Sofar or Solis inverter with a Solarman Wi-Fi logger, read locally: solar, battery, grid.",
+    "fr": "Onduleur Deye, Sofar ou Solis avec logger Wi-Fi Solarman, lu en local : solaire, batterie, réseau.",
+    "de": "Deye, Sofar oder Solis mit Solarman-WLAN-Logger, lokal gelesen: Solar, Batterie, Netz.",
+    "es": "Inversor Deye, Sofar o Solis con logger Wi-Fi Solarman, leído en local: solar, batería y red."
   },
   "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "docker_image": "ghcr.io/guim31/gladys-solarman:1.0.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/guim31/gladys-solarman/main/cover.png",
+  "categories": ["energy"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Solarman logger",
+        "fr": "Logger Solarman",
+        "de": "Solarman-Logger",
+        "es": "Logger Solarman"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "The inverter is read through its Solarman Wi-Fi logger (LSW-3 stick), on the local network, port 8899. The logger serial number is the 10-digit number on its label (17…, 21…, 23…, 27…, 40…). Read only: nothing is ever written to the inverter.",
+        "fr": "L'onduleur est lu via son logger Wi-Fi Solarman (clé LSW-3), sur le réseau local, port 8899. Le numéro de série du logger est le nombre à 10 chiffres de son étiquette (17…, 21…, 23…, 27…, 40…). Lecture seule : rien n'est jamais écrit dans l'onduleur.",
+        "de": "Der Wechselrichter wird über seinen Solarman-WLAN-Logger (LSW-3-Stick) im lokalen Netzwerk gelesen, Port 8899. Die Seriennummer des Loggers ist die 10-stellige Zahl auf seinem Etikett (17…, 21…, 23…, 27…, 40…). Nur lesend: In den Wechselrichter wird nie etwas geschrieben.",
+        "es": "El inversor se lee a través de su logger Wi-Fi Solarman (llave LSW-3), en la red local, puerto 8899. El número de serie del logger es el número de 10 cifras de su etiqueta (17…, 21…, 23…, 27…, 40…). Solo lectura: nunca se escribe nada en el inversor."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/guim31/gladys-solarman#readme",
+          "label": {
+            "en": "Documentation",
+            "fr": "Documentation",
+            "de": "Dokumentation",
+            "es": "Documentación"
+          }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
+      "key": "host",
+      "type": "string",
+      "label": {
+        "en": "Logger IP address",
+        "fr": "Adresse IP du logger",
+        "de": "IP-Adresse des Loggers",
+        "es": "Dirección IP del logger"
       },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
+      "description": {
+        "en": "Give the logger a fixed address in your router.",
+        "fr": "Donnez au logger une adresse fixe dans votre box.",
+        "de": "Gib dem Logger eine feste Adresse in deinem Router.",
+        "es": "Asigne al logger una dirección fija en su router."
+      },
+      "placeholder": {
+        "en": "e.g. 192.168.1.50",
+        "fr": "ex. 192.168.1.50",
+        "de": "z. B. 192.168.1.50",
+        "es": "p. ej. 192.168.1.50"
+      },
+      "required": true
     },
     {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+      "key": "serial",
+      "type": "string",
+      "label": {
+        "en": "Logger serial number",
+        "fr": "Numéro de série du logger",
+        "de": "Seriennummer des Loggers",
+        "es": "Número de serie del logger"
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "description": {
+        "en": "10 digits, on the logger label (not the inverter serial).",
+        "fr": "10 chiffres, sur l'étiquette du logger (pas le numéro de l'onduleur).",
+        "de": "10 Ziffern auf dem Etikett des Loggers (nicht die Seriennummer des Wechselrichters).",
+        "es": "10 cifras, en la etiqueta del logger (no el número del inversor)."
+      },
+      "placeholder": {
+        "en": "e.g. 2712345678",
+        "fr": "ex. 2712345678",
+        "de": "z. B. 2712345678",
+        "es": "p. ej. 2712345678"
+      },
+      "required": true
     },
     {
-      "key": "unit",
+      "key": "profile",
       "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
-      "required": false,
-      "default": "celsius",
+      "label": {
+        "en": "Inverter model",
+        "fr": "Modèle d'onduleur",
+        "de": "Wechselrichtermodell",
+        "es": "Modelo de inversor"
+      },
+      "required": true,
+      "default": "deye_hybrid",
       "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
+        {
+          "value": "deye_hybrid",
+          "label": {
+            "en": "Deye hybrid, single-phase (SUN-…-SG0xLP1, Sunsynk, Sol-Ark)",
+            "fr": "Deye hybride monophasé (SUN-…-SG0xLP1, Sunsynk, Sol-Ark)",
+            "de": "Deye Hybrid, einphasig (SUN-…-SG0xLP1, Sunsynk, Sol-Ark)",
+            "es": "Deye híbrido monofásico (SUN-…-SG0xLP1, Sunsynk, Sol-Ark)"
+          }
+        },
+        {
+          "value": "deye_hybrid_3p",
+          "label": {
+            "en": "Deye hybrid, three-phase, low-voltage battery (SG04LP3)",
+            "fr": "Deye hybride triphasé, batterie basse tension (SG04LP3)",
+            "de": "Deye Hybrid, dreiphasig, Niedervolt-Batterie (SG04LP3)",
+            "es": "Deye híbrido trifásico, batería de baja tensión (SG04LP3)"
+          }
+        },
+        {
+          "value": "deye_hybrid_3p_hv",
+          "label": {
+            "en": "Deye hybrid, three-phase, high-voltage battery (SG01HP3)",
+            "fr": "Deye hybride triphasé, batterie haute tension (SG01HP3)",
+            "de": "Deye Hybrid, dreiphasig, Hochvolt-Batterie (SG01HP3)",
+            "es": "Deye híbrido trifásico, batería de alta tensión (SG01HP3)"
+          }
+        },
+        {
+          "value": "deye_micro",
+          "label": {
+            "en": "Deye microinverter (SUN-M, SUN600/800/2000G3…)",
+            "fr": "Deye micro-onduleur (SUN-M, SUN600/800/2000G3…)",
+            "de": "Deye Mikrowechselrichter (SUN-M, SUN600/800/2000G3…)",
+            "es": "Deye microinversor (SUN-M, SUN600/800/2000G3…)"
+          }
+        },
+        {
+          "value": "sofar_g3",
+          "label": {
+            "en": "Sofar G3 (KTLX-G3, three-phase string)",
+            "fr": "Sofar G3 (KTLX-G3, triphasé sans batterie)",
+            "de": "Sofar G3 (KTLX-G3, dreiphasig ohne Batterie)",
+            "es": "Sofar G3 (KTLX-G3, trifásico sin batería)"
+          }
+        },
+        {
+          "value": "solis_1p",
+          "label": {
+            "en": "Solis single-phase string (1P…-5G)",
+            "fr": "Solis monophasé sans batterie (1P…-5G)",
+            "de": "Solis einphasig ohne Batterie (1P…-5G)",
+            "es": "Solis monofásico sin batería (1P…-5G)"
+          }
+        }
       ]
     },
     {
-      "key": "poll_frequency",
+      "key": "pv_inputs",
       "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
+      "label": {
+        "en": "PV inputs used",
+        "fr": "Entrées PV utilisées",
+        "de": "Genutzte PV-Eingänge",
+        "es": "Entradas FV usadas"
+      },
       "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
+        "en": "Number of panel strings wired to the inverter (one production per input, 1 to 4).",
+        "fr": "Nombre de chaînes de panneaux branchées sur l'onduleur (une production par entrée, de 1 à 4).",
+        "de": "Anzahl der am Wechselrichter angeschlossenen Modulstränge (eine Produktion pro Eingang, 1 bis 4).",
+        "es": "Número de cadenas de paneles conectadas al inversor (una producción por entrada, de 1 a 4)."
       },
       "required": false,
-      "default": 300,
-      "min": 60,
+      "default": 2,
+      "min": 1,
+      "max": 4
+    },
+    {
+      "key": "poll_interval",
+      "type": "number",
+      "label": {
+        "en": "Reading interval (s)",
+        "fr": "Intervalle de lecture (s)",
+        "de": "Leseintervall (s)",
+        "es": "Intervalo de lectura (s)"
+      },
+      "description": {
+        "en": "15 seconds minimum: the logger also sends its data to the Solarman cloud.",
+        "fr": "15 secondes minimum : le logger envoie aussi ses données au cloud Solarman.",
+        "de": "Mindestens 15 Sekunden: Der Logger sendet seine Daten auch an die Solarman-Cloud.",
+        "es": "15 segundos como mínimo: el logger también envía sus datos a la nube de Solarman."
+      },
+      "required": false,
+      "default": 30,
+      "min": 15,
       "max": 3600
+    },
+    {
+      "key": "export_threshold",
+      "type": "number",
+      "label": {
+        "en": "Export threshold (W)",
+        "fr": "Seuil d'injection (W)",
+        "de": "Einspeiseschwelle (W)",
+        "es": "Umbral de exportación (W)"
+      },
+      "description": {
+        "en": "Power sent to the grid from which the \"Grid export started\" trigger fires.",
+        "fr": "Puissance injectée à partir de laquelle le déclencheur « Injection réseau démarrée » se déclenche.",
+        "de": "Eingespeiste Leistung, ab der der Auslöser „Einspeisung gestartet“ auslöst.",
+        "es": "Potencia exportada a partir de la cual se activa el disparador «Exportación a red iniciada»."
+      },
+      "required": false,
+      "default": 100,
+      "min": 10,
+      "max": 100000
+    },
+    {
+      "key": "slave_id",
+      "type": "number",
+      "label": {
+        "en": "Modbus address",
+        "fr": "Adresse Modbus",
+        "de": "Modbus-Adresse",
+        "es": "Dirección Modbus"
+      },
+      "description": {
+        "en": "Address of the inverter behind the logger: 1 in almost every case.",
+        "fr": "Adresse de l'onduleur derrière le logger : 1 dans presque tous les cas.",
+        "de": "Adresse des Wechselrichters hinter dem Logger: fast immer 1.",
+        "es": "Dirección del inversor detrás del logger: 1 en casi todos los casos."
+      },
+      "required": false,
+      "default": 1,
+      "min": 1,
+      "max": 247
+    },
+    {
+      "key": "port",
+      "type": "number",
+      "label": {
+        "en": "Logger TCP port",
+        "fr": "Port TCP du logger",
+        "de": "TCP-Port des Loggers",
+        "es": "Puerto TCP del logger"
+      },
+      "required": false,
+      "default": 8899,
+      "min": 1,
+      "max": 65535
+    },
+    {
+      "key": "language",
+      "type": "select",
+      "label": {
+        "en": "Language of the feature names",
+        "fr": "Langue des noms de fonctionnalités",
+        "de": "Sprache der Funktionsnamen",
+        "es": "Idioma de los nombres de las funciones"
+      },
+      "description": {
+        "en": "Used for the names of the inverter features (when it is added) and for the messages of the actions.",
+        "fr": "Utilisée pour les noms des fonctionnalités de l'onduleur (à son ajout) et pour les messages des actions.",
+        "de": "Wird für die Funktionsnamen des Wechselrichters (beim Hinzufügen) und für die Meldungen der Aktionen verwendet.",
+        "es": "Se usa para los nombres de las funciones del inversor (al añadirlo) y para los mensajes de las acciones."
+      },
+      "required": false,
+      "default": "fr",
+      "options": [
+        {
+          "value": "en",
+          "label": {
+            "en": "English",
+            "fr": "Anglais",
+            "de": "Englisch",
+            "es": "Inglés"
+          }
+        },
+        {
+          "value": "fr",
+          "label": {
+            "en": "French",
+            "fr": "Français",
+            "de": "Französisch",
+            "es": "Francés"
+          }
+        },
+        {
+          "value": "de",
+          "label": {
+            "en": "German",
+            "fr": "Allemand",
+            "de": "Deutsch",
+            "es": "Alemán"
+          }
+        },
+        {
+          "value": "es",
+          "label": {
+            "en": "Spanish",
+            "fr": "Espagnol",
+            "de": "Spanisch",
+            "es": "Español"
+          }
+        }
+      ]
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "test_connection",
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion",
+        "de": "Verbindung testen",
+        "es": "Probar la conexión"
+      },
+      "timeout_seconds": 60
     }
   ],
   "scene_triggers": [
     {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "battery_full",
+      "label": {
+        "en": "Battery full",
+        "fr": "Batterie pleine",
+        "de": "Batterie voll",
+        "es": "Batería llena"
+      },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
+        "en": "The battery reaches 100 % (again after dropping to 95 %).",
+        "fr": "La batterie atteint 100 % (à nouveau après être redescendue à 95 %).",
+        "de": "Die Batterie erreicht 100 % (erneut, nachdem sie auf 95 % gefallen ist).",
+        "es": "La batería alcanza el 100 % (de nuevo tras bajar al 95 %)."
+      },
+      "variables": [
+        {
+          "key": "battery_level",
+          "type": "number",
+          "label": {
+            "en": "Battery level (%)",
+            "fr": "Niveau de batterie (%)",
+            "de": "Batteriestand (%)",
+            "es": "Nivel de batería (%)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "battery_below",
+      "label": {
+        "en": "Battery drops to…",
+        "fr": "La batterie descend à…",
+        "de": "Batterie fällt auf…",
+        "es": "La batería baja a…"
+      },
+      "description": {
+        "en": "The battery level goes down to a threshold or below (again after going 5 points above it).",
+        "fr": "Le niveau de la batterie descend à un seuil ou en dessous (à nouveau après être remonté de 5 points).",
+        "de": "Der Batteriestand fällt auf eine Schwelle oder darunter (erneut, nachdem er 5 Punkte darüber gestiegen ist).",
+        "es": "El nivel de la batería baja a un umbral o por debajo (de nuevo tras subir 5 puntos por encima)."
       },
       "fields": [
         {
-          "key": "device",
+          "key": "threshold",
           "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
+          "label": {
+            "en": "Threshold",
+            "fr": "Seuil",
+            "de": "Schwelle",
+            "es": "Umbral"
+          },
+          "required": true,
+          "default": "20",
           "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
+            {
+              "value": "10",
+              "label": {
+                "en": "10 %",
+                "fr": "10 %",
+                "de": "10 %",
+                "es": "10 %"
+              }
+            },
+            {
+              "value": "15",
+              "label": {
+                "en": "15 %",
+                "fr": "15 %",
+                "de": "15 %",
+                "es": "15 %"
+              }
+            },
+            {
+              "value": "20",
+              "label": {
+                "en": "20 %",
+                "fr": "20 %",
+                "de": "20 %",
+                "es": "20 %"
+              }
+            },
+            {
+              "value": "25",
+              "label": {
+                "en": "25 %",
+                "fr": "25 %",
+                "de": "25 %",
+                "es": "25 %"
+              }
+            },
+            {
+              "value": "30",
+              "label": {
+                "en": "30 %",
+                "fr": "30 %",
+                "de": "30 %",
+                "es": "30 %"
+              }
+            },
+            {
+              "value": "40",
+              "label": {
+                "en": "40 %",
+                "fr": "40 %",
+                "de": "40 %",
+                "es": "40 %"
+              }
+            },
+            {
+              "value": "50",
+              "label": {
+                "en": "50 %",
+                "fr": "50 %",
+                "de": "50 %",
+                "es": "50 %"
+              }
+            }
           ]
         }
       ],
       "variables": [
         {
-          "key": "target",
+          "key": "battery_level",
+          "type": "number",
+          "label": {
+            "en": "Battery level (%)",
+            "fr": "Niveau de batterie (%)",
+            "de": "Batteriestand (%)",
+            "es": "Nivel de batería (%)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "inverter_fault",
+      "label": {
+        "en": "Inverter fault",
+        "fr": "Onduleur en défaut",
+        "de": "Wechselrichterfehler",
+        "es": "Fallo del inversor"
+      },
+      "description": {
+        "en": "The inverter goes into alarm or fault.",
+        "fr": "L'onduleur passe en alarme ou en défaut.",
+        "de": "Der Wechselrichter geht in Alarm oder Fehler.",
+        "es": "El inversor pasa a alarma o fallo."
+      },
+      "fields": [
+        {
+          "key": "state",
+          "type": "multi_select",
+          "label": {
+            "en": "State",
+            "fr": "État",
+            "de": "Zustand",
+            "es": "Estado"
+          },
+          "required": false,
+          "description": {
+            "en": "Leave empty for both.",
+            "fr": "Laisser vide pour les deux.",
+            "de": "Leer lassen für beide.",
+            "es": "Déjelo vacío para ambos."
+          },
+          "options": [
+            {
+              "value": "alarm",
+              "label": {
+                "en": "Alarm",
+                "fr": "Alarme",
+                "de": "Alarm",
+                "es": "Alarma"
+              }
+            },
+            {
+              "value": "fault",
+              "label": {
+                "en": "Fault",
+                "fr": "Défaut",
+                "de": "Fehler",
+                "es": "Fallo"
+              }
+            }
+          ]
+        }
+      ],
+      "variables": [
+        {
+          "key": "state",
           "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
+          "label": {
+            "en": "State",
+            "fr": "État",
+            "de": "Zustand",
+            "es": "Estado"
+          }
+        },
+        {
+          "key": "code",
+          "type": "number",
+          "label": {
+            "en": "State code",
+            "fr": "Code d'état",
+            "de": "Zustandscode",
+            "es": "Código de estado"
+          }
+        }
+      ]
+    },
+    {
+      "key": "grid_export_started",
+      "label": {
+        "en": "Grid export started",
+        "fr": "Injection réseau démarrée",
+        "de": "Einspeisung gestartet",
+        "es": "Exportación a red iniciada"
+      },
+      "description": {
+        "en": "The house starts sending power to the grid (above the export threshold of the configuration).",
+        "fr": "La maison commence à injecter sur le réseau (au-delà du seuil d'injection de la configuration).",
+        "de": "Das Haus beginnt, ins Netz einzuspeisen (über der Einspeiseschwelle der Konfiguration).",
+        "es": "La casa empieza a exportar a la red (por encima del umbral de exportación de la configuración)."
+      },
+      "variables": [
+        {
+          "key": "power",
+          "type": "number",
+          "label": {
+            "en": "Exported power (W)",
+            "fr": "Puissance injectée (W)",
+            "de": "Eingespeiste Leistung (W)",
+            "es": "Potencia exportada (W)"
+          }
+        }
+      ]
+    },
+    {
+      "key": "grid_export_stopped",
+      "label": {
+        "en": "Grid export stopped",
+        "fr": "Injection réseau arrêtée",
+        "de": "Einspeisung beendet",
+        "es": "Exportación a red detenida"
+      },
+      "description": {
+        "en": "The house stops sending power to the grid (below half the export threshold).",
+        "fr": "La maison cesse d'injecter sur le réseau (sous la moitié du seuil d'injection).",
+        "de": "Das Haus hört auf, ins Netz einzuspeisen (unter der Hälfte der Einspeiseschwelle).",
+        "es": "La casa deja de exportar a la red (por debajo de la mitad del umbral de exportación)."
+      },
+      "variables": [
+        {
+          "key": "power",
+          "type": "number",
+          "label": {
+            "en": "Exported power (W)",
+            "fr": "Puissance injectée (W)",
+            "de": "Eingespeiste Leistung (W)",
+            "es": "Potencia exportada (W)"
+          }
         }
       ]
     }
   ],
   "scene_actions": [
     {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
+      "key": "read_status",
+      "label": {
+        "en": "Read the inverter status",
+        "fr": "Lire l'état de l'onduleur",
+        "de": "Wechselrichterstatus lesen",
+        "es": "Leer el estado del inversor"
       },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
+      "description": {
+        "en": "Reads the inverter and gives a sentence to send (production, house, battery, grid).",
+        "fr": "Lit l'onduleur et fournit une phrase à envoyer (production, maison, batterie, réseau).",
+        "de": "Liest den Wechselrichter und liefert einen Satz zum Senden (Produktion, Haus, Batterie, Netz).",
+        "es": "Lee el inversor y proporciona una frase para enviar (producción, casa, batería, red)."
+      },
+      "timeout_seconds": 60,
       "outputs": [
         {
-          "key": "signalled",
+          "key": "summary",
+          "type": "string",
+          "label": {
+            "en": "Status sentence",
+            "fr": "Phrase d'état",
+            "de": "Statussatz",
+            "es": "Frase de estado"
+          }
+        },
+        {
+          "key": "online",
           "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
+          "label": {
+            "en": "Inverter answering",
+            "fr": "Onduleur joignable",
+            "de": "Wechselrichter erreichbar",
+            "es": "Inversor accesible"
+          }
+        },
+        {
+          "key": "production",
+          "type": "number",
+          "label": {
+            "en": "Solar production (W)",
+            "fr": "Production solaire (W)",
+            "de": "Solarproduktion (W)",
+            "es": "Producción solar (W)"
+          }
+        },
+        {
+          "key": "house_consumption",
+          "type": "number",
+          "label": {
+            "en": "House consumption (W)",
+            "fr": "Consommation maison (W)",
+            "de": "Hausverbrauch (W)",
+            "es": "Consumo de la casa (W)"
+          }
+        },
+        {
+          "key": "grid_power",
+          "type": "number",
+          "label": {
+            "en": "Grid power (W, import +)",
+            "fr": "Puissance réseau (W, soutirage +)",
+            "de": "Netzleistung (W, Bezug +)",
+            "es": "Potencia de red (W, importación +)"
+          }
+        },
+        {
+          "key": "battery_level",
+          "type": "number",
+          "label": {
+            "en": "Battery level (%)",
+            "fr": "Niveau de batterie (%)",
+            "de": "Batteriestand (%)",
+            "es": "Nivel de batería (%)"
+          }
+        },
+        {
+          "key": "production_today",
+          "type": "number",
+          "label": {
+            "en": "Production today (kWh)",
+            "fr": "Production du jour (kWh)",
+            "de": "Produktion heute (kWh)",
+            "es": "Producción de hoy (kWh)"
+          }
         }
       ]
     }
   ],
   "widgets": [
     {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
+      "key": "solar",
+      "label": {
+        "en": "Solar",
+        "fr": "Solaire",
+        "de": "Solar",
+        "es": "Solar"
       },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+      "description": {
+        "en": "Solar production, house, grid exchange, battery and production of the day.",
+        "fr": "Production solaire, maison, échanges réseau, batterie et production du jour.",
+        "de": "Solarproduktion, Haus, Netzaustausch, Batterie und Tagesproduktion.",
+        "es": "Producción solar, casa, intercambio con la red, batería y producción del día."
+      },
+      "icon": "sun"
     }
   ]
 }

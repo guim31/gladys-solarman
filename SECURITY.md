@@ -30,6 +30,18 @@ Gladys before reporting a problem.
 
 In scope: the code of this repository and the Docker image it publishes.
 
+What the integration handles:
+
+- **Nothing is stored in `/data`**: the configuration (logger IP address,
+  serial number, model) is kept by Gladys and read at start-up.
+- **No secret**: the Solarman V5 protocol has no password. The logger serial
+  number acts as its only "key" on the local network; it is never written in
+  the logs.
+- **Network**: one TCP connection, from the container to the logger address
+  entered by the user, port 8899 by default. Nothing goes to the internet.
+- **Read only**: the integration only sends Modbus read requests (functions 3
+  and 4); it has no code path that writes a register of the inverter.
+
 Out of scope: Gladys Assistant itself (see its
 [security policy](https://github.com/GladysAssistant/Gladys/security/policy)),
-and the third-party services and devices the integration talks to.
+the Solarman logger and its firmware, the inverters, and the Solarman cloud.

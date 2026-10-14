@@ -1,0 +1,196 @@
+# Solarman (Deye, Sofar, Solis)
+
+Lies in Gladys über dein lokales Netzwerk einen Solar-Wechselrichter mit
+**Solarman-WLAN-Logger** (dem „LSW-3“-Stick, der mit Deye-, Sunsynk-,
+Sol-Ark-, Sofar-, Solis- und vielen anderen Wechselrichtern geliefert wird):
+Solarproduktion pro PV-Eingang, Hausverbrauch, Netzbezug und Einspeisung,
+Batteriestand und -leistung, Tagesenergien und Zählerstände für den
+Energie-Tab von Gladys, mit einem Dashboard-Widget, fünf Szenenauslösern und
+einer Szenenaktion. Kein Konto, keine Cloud: Gladys spricht direkt mit dem
+Logger über das Solarman-V5-Protokoll (TCP-Port 8899), das auch die
+Solarman-App nutzt. **Nur lesend**: In den Wechselrichter wird nie etwas
+geschrieben.
+
+> **Ohne die Hardware entwickelt: Rückmeldungen willkommen.** Diese
+> Integration wurde anhand der veröffentlichten Registertabellen dieser
+> Wechselrichter, eines echten Austauschs mit einem Deye-Logger und eines
+> simulierten Loggers entwickelt, nicht an einem echten Wechselrichter. Wenn
+> etwas nicht wie beschrieben funktioniert, sag es bitte im
+> [Gladys-Forum](https://community.gladysassistant.com) oder in den
+> [Issues](https://github.com/guim31/gladys-solarman/issues).
+
+## Was du brauchst
+
+- Gladys Assistant 5.1.0 oder neuer.
+- Einen Wechselrichter mit Solarman-WLAN-Logger, dessen Seriennummer mit 17,
+  21, 23, 27 oder 40 beginnt (10 Ziffern, auf dem Etikett des Loggers), im
+  selben Netzwerk wie Gladys. Unterstützte Modelle:
+  - **Deye Hybrid, einphasig** (SUN-…K-SG0xLP1 sowie die darauf
+    basierenden Sunsynk und Sol-Ark);
+  - **Deye Hybrid, dreiphasig**, Niedervolt-Batterie (SG04LP3) oder
+    Hochvolt-Batterie (SG01HP3);
+  - **Deye Mikrowechselrichter** (SUN-M, SUN600/800/2000G3…);
+  - **Sofar G3** (KTLX-G3 dreiphasig, ohne Batterie);
+  - **Solis einphasig** (1P…-5G, ohne Batterie).
+- Eine feste IP-Adresse für den Logger (eine DHCP-Reservierung im Router).
+
+## Einrichtung
+
+1. Gehe in Gladys zu **Integrationen → Von GitHub installieren** und gib
+   `https://github.com/guim31/gladys-solarman` ein.
+2. Fülle in der Konfiguration der Integration aus:
+   - **IP-Adresse des Loggers**;
+   - **Seriennummer des Loggers**: die 10 Ziffern auf dem Etikett des
+     Loggers, nicht die Seriennummer des Wechselrichters;
+   - **Wechselrichtermodell**;
+   - **Genutzte PV-Eingänge**: die Anzahl der am Wechselrichter
+     angeschlossenen Modulstränge (eine Produktion pro Eingang);
+   - bei Bedarf das **Leseintervall (s)** (standardmäßig 30 s, mindestens
+     15 s), die **Einspeiseschwelle (W)** der Einspeise-Auslöser, die
+     **Modbus-Adresse** (fast immer 1), den **TCP-Port des Loggers** (8899)
+     und die **Sprache der Funktionsnamen**.
+3. Starte **Verbindung testen** im Tab Konfiguration: Die Integration liest
+   den Wechselrichter einmal und antwortet mit dem, was sie sieht, oder mit
+   dem Grund des Fehlers.
+4. Öffne den Tab **Entdecken** und füge den Wechselrichter hinzu. Seine Werte
+   kommen sofort und dann bei jeder Messung.
+
+## Das Gerät in Gladys
+
+Ein Gerät pro Wechselrichter, nach seiner Marke benannt (zum Beispiel
+„Solar-Wechselrichter Deye“). Die Funktionen hängen vom Modell ab: Ein Modell
+ohne Batterie hat keine Batteriefunktion, ein Mikrowechselrichter weder Netz
+noch Haus.
+
+| Funktion                      | Einheit | Was es ist                                                   |
+| ----------------------------- | ------- | ------------------------------------------------------------ |
+| Solarproduktion               | W       | Produktion der Module, alle Eingänge zusammen                |
+| Produktion PV1, PV2…          | W       | Produktion jedes PV-Eingangs (wenn es mehrere gibt)          |
+| Produktion heute              | kWh     | seit Mitternacht erzeugte Energie                            |
+| Gesamtproduktion              | kWh     | Produktionszählerstand des Wechselrichters (Energie-Tab)     |
+| Netzleistung                  | W       | positiv bei Bezug, negativ bei Einspeisung                   |
+| Netzbezug heute               | kWh     | seit Mitternacht aus dem Netz bezogene Energie               |
+| Einspeisung heute             | kWh     | seit Mitternacht ins Netz gespeiste Energie                  |
+| Zählerstand Netzbezug         | kWh     | Bezugszähler: Gladys macht daraus Verbrauch und Kosten       |
+| Zählerstand Einspeisung       | kWh     | Einspeisezähler                                              |
+| Hausverbrauch                 | W       | vom Haus verbrauchte Leistung                                |
+| Hausverbrauch heute           | kWh     | seit Mitternacht vom Haus verbrauchte Energie                |
+| Batteriestand                 | %       | Ladezustand                                                  |
+| Batterieladung                | W       | Leistung, die in die Batterie fließt                         |
+| Batterieentladung             | W       | Leistung, die aus der Batterie kommt                         |
+| Zählerstand Batterieladung    | kWh     | seit der Installation geladene Energie                       |
+| Zählerstand Batterieentladung | kWh     | seit der Installation entladene Energie                      |
+| Batterietemperatur            | °C      |                                                              |
+| Wechselrichtertemperatur      | °C      |                                                              |
+| Wechselrichterzustand         | Text    | Standby, Startet, Normal, Alarm, Fehler oder Antwortet nicht |
+
+**Energie-Tab.** Nur der **Zählerstand Netzbezug** wird von Gladys als
+Verbrauch gezählt (mit seinen Kosten): Das ist, was dein Versorger abrechnet.
+Der Hausverbrauch nicht, denn die von deinen Modulen erzeugte und im Haus
+genutzte Energie ist kostenlos; der Produktionszählerstand speist die
+Produktion von Gladys. Wenn das Haus auch von einem Smart Meter gelesen wird,
+behalte diesen Zähler als Hauptzähler.
+
+**Nachts.** Der Logger eines Wechselrichters ohne Batterie wird von den
+Modulen versorgt: Er geht nachts aus. Nach drei Messungen ohne Antwort wird
+der Zustand „Antwortet nicht“, die Solarproduktion fällt auf 0 W, die
+anderen Werte bleiben, wie sie waren; morgens kommt alles von selbst zurück.
+Die Integration wird in dieser Zeit auch als getrennt angezeigt.
+
+## Dashboard-Widget
+
+**Solar** zeigt auf einen Blick:
+
+- **Solar**: die Produktion der Module;
+- **Haus**: den Verbrauch des Hauses;
+- **Netzbezug** oder **Einspeisung**: den Austausch mit dem Netz, mit seiner
+  Richtung;
+- **Batterie**: den Batteriestand, und **Ladung** oder **Entladung** mit der
+  Batterieleistung;
+- **Heute**: die Produktion des Tages;
+- den Zustand des Wechselrichters und die Uhrzeit der letzten Messung.
+
+Füge es im Dashboard-Editor hinzu (Box „Integrations-Widget“). Solange der
+Wechselrichter nicht in Gladys hinzugefügt ist, sagt das Widget es.
+
+## Szenen
+
+### Auslöser
+
+- **Batterie voll**: Die Batterie erreicht 100 % (einmal; erneut, nachdem sie
+  auf 95 % gefallen ist). Variable: der Batteriestand.
+- **Batterie fällt auf…**: Der Batteriestand fällt auf die gewählte Schwelle
+  (10 bis 50 %) oder darunter. Er löst erneut aus, sobald der Stand 5 Punkte
+  über die Schwelle gestiegen ist. Variable: der Batteriestand.
+- **Wechselrichterfehler**: Der Wechselrichter geht in Alarm oder Fehler
+  (wähle eines, oder lass das Feld für beide leer). Variablen: der Zustand
+  und sein Code.
+- **Einspeisung gestartet**: Das Haus beginnt, mehr als die
+  **Einspeiseschwelle (W)** der Konfiguration ins Netz zu speisen. Variable:
+  die eingespeiste Leistung.
+- **Einspeisung beendet**: Die Einspeisung fällt unter die Hälfte dieser
+  Schwelle. Variable: die eingespeiste Leistung (negativ bei Bezug).
+
+Bei der ersten Messung nach einem Start löst nichts aus: Eine schon leere
+Batterie ist ein Zustand, kein Ereignis. Um auf einen Wert zu reagieren
+(„Produktion über 2 kW“), nutze die Funktionen des Geräts in einem Auslöser
+„Gerätezustand“.
+
+### Aktionen
+
+- **Wechselrichterstatus lesen**: Liest den Wechselrichter und gibt den
+  folgenden Aktionen einen **Statussatz** zum Senden („Solar 2.340 W, Haus
+  1.200 W, Batterie 85 % (lädt 800 W), Einspeisung 340 W; 12,4 kWh heute
+  erzeugt; Zustand Normal.“) sowie Solarproduktion, Hausverbrauch,
+  Netzleistung, Batteriestand und Tagesproduktion als Zahlen. Der Satz ist in
+  der Sprache der Konfiguration geschrieben.
+
+### Szenenideen
+
+- **Überschuss nutzen**: Bei **Einspeisung gestartet** den Warmwasserbereiter
+  oder die Poolpumpe einschalten; bei **Einspeisung beendet** ausschalten.
+- **Batterie schonen**: Wenn die **Batterie fällt auf…** 20 %, eine Nachricht
+  senden und die Heizungen ausschalten, die warten können.
+- **Abendbericht**: Jeden Tag um 21 Uhr **Wechselrichterstatus lesen** und
+  den Statussatz an dein Handy senden.
+- **Wechselrichter überwachen**: Bei einem **Wechselrichterfehler** eine
+  Nachricht mit dem Zustand senden.
+
+## Fehlerbehebung
+
+- **Verbindung testen meldet „keine Verbindung zum Logger“**: Prüfe die
+  IP-Adresse des Loggers und ob Gladys im selben Netzwerk ist. Der Logger
+  muss auf Port 8899 antworten (manche neue „LSE“-Logger bieten ihn nicht an).
+- **„Der Logger antwortet nicht“**: Die Seriennummer ist falsch (der Logger
+  bleibt stumm), oder der Logger ist aus (Nacht, Wechselrichter ohne
+  Batterie).
+- **„Der Logger antwortet, aber nicht der Wechselrichter“**: Prüfe die
+  **Modbus-Adresse** (standardmäßig 1) und das Kabel zwischen Logger und
+  Wechselrichter.
+- **„Der Wechselrichter lehnt die gelesenen Register ab“**: Das gewählte
+  Modell passt nicht zum Wechselrichter.
+- **Werte, die falsch wirken** (eine zehnmal zu kleine Leistung, ein
+  umgekehrtes Vorzeichen): Prüfe das Modell, besonders Nieder- oder
+  Hochvolt-Batterie bei den dreiphasigen Deye-Hybriden, und melde es im Forum
+  mit einem Screenshot der Solarman-App.
+- Mehr Details in den Protokollen der Integration, mit `LOG_LEVEL=debug`.
+
+## Grenzen
+
+- Nur lesend: Keine Einstellung des Wechselrichters kann geändert werden
+  (Betriebsmodus, Batterieladung, Einspeisebegrenzung), bewusst, für die
+  Sicherheit von Batterie und Netz.
+- Ein Wechselrichter pro Installation der Integration.
+- Der Logger bedient nur wenige Clients gleichzeitig: Gladys hält eine
+  Verbindung und liest höchstens alle 15 Sekunden. Ein anderes lokales
+  Werkzeug, das denselben Logger gleichzeitig liest, kann Fehler bekommen.
+- Die Solarman-Cloud wird nicht genutzt und funktioniert weiter wie bisher.
+- Der gesamte Hausverbrauch hat keinen Zählerstand in Gladys (nur den
+  Tageswert), damit er im Energie-Tab nie doppelt gezählt wird.
+- Andere Modelle (Deye-Stringwechselrichter, Sofar- und Solis-Hybride, Afore,
+  KStar, Megarevo…) werden noch nicht unterstützt: Frag im Forum danach.
+
+Registertabellen nach [ha-solarman](https://github.com/davidrapan/ha-solarman)
+(MIT) und V5-Protokoll nach
+[pysolarmanv5](https://github.com/jmccrohan/pysolarmanv5) (MIT). Nicht mit
+Solarman, Deye, Sofar oder Solis verbunden.
