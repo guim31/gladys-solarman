@@ -1,6 +1,6 @@
 {
   "name": "gladys-solarman",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Gladys Assistant integration for solar inverters with a Solarman Wi-Fi logger (Deye, Sofar, Solis), read locally with the Solarman V5 protocol.",
   "type": "module",
